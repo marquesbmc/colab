@@ -1,0 +1,1035 @@
+# PARTE 0 - Libs e afins
+
+gpu_info = !nvidia-smi
+gpu_info = '\n'.join(gpu_info)
+if gpu_info.find('failed') >= 0:
+  print('Not connected to a GPU')
+else:
+  print(gpu_info)
+
+from psutil import virtual_memory
+ram_gb = virtual_memory().total / 1e9
+print('Your runtime has {:.1f} gigabytes of available RAM\n'.format(ram_gb))
+
+if ram_gb < 20:
+  print('Not using a high-RAM runtime')
+else:
+  print('You are using a high-RAM runtime!')
+
+import random
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+!apt install ffmpeg
+
+
+# Simulador
+
+### Classe: Id
+
+class Id:
+    # Lista de ids
+    ids = []
+
+    @classmethod
+    def create_id(cls):
+        # Se a lista de IDs estiver vazia, adiciona o primeiro ID como [0]
+        if not cls.ids:
+            cls.ids.append([0])
+        else:
+            # Encontra o maior ID existente
+            max_id = max(sublist[0] for sublist in cls.ids)
+            # Cria um novo ID que é o maior ID + 1
+            new_id = max_id + 1
+            # Adiciona o novo ID à lista como uma sublista
+            cls.ids.append([new_id])
+        # Retorna o novo ID
+        return cls.ids[-1][0]
+
+    @classmethod
+    def reset_ids(cls):
+        # Reseta a lista de ids, removendo todos os elementos
+        cls.ids = []
+
+    @classmethod
+    def get_ids(cls):
+        # Retorna a lista de ids
+        return [id[0] for id in cls.ids]
+
+    @classmethod
+    def get_value_by_id(cls, id_value):
+        # Retorna o valor de uma sublista dado um ID
+        for id in cls.ids:
+            if id[0] == id_value:
+                return id[1:]  # Retorna todos os valores da sublista, excluindo o ID
+        return None  # Retorna None se o ID não for encontrado
+
+    @classmethod
+    def delete_id(cls, item):
+        # Verifica se o item está na lista de ids
+        for id in cls.ids:
+            if id[0] == item:
+                cls.ids.remove(id)
+                break
+
+    @classmethod
+    def delete_id_by_value(cls, value):
+        # Verifica se o valor está na lista de ids
+        for id in cls.ids:
+            if id[0] == value:
+                cls.ids.remove(id)
+                break
+
+    @classmethod
+    def check_duplicate_ids(cls):
+        # Verifica se existem IDs duplicados
+        id_values = [id[0] for id in cls.ids]
+        return len(id_values) != len(set(id_values))
+
+    @classmethod
+    def check_duplicate_sublist_values(cls):
+        # Verifica se existem valores duplicados dentro das sublistas
+        for sublist in cls.ids:
+            if len(sublist) != len(set(sublist)):
+                return True
+        return False
+
+### Classe: Grid
+
+
+class Grid:
+    def __init__(self, grid_x, grid_y):
+        self.grid_x = grid_x
+        self.grid_y = grid_y
+        self.grid = [[None for _ in range(grid_y)] for _ in range(grid_x)]
+
+    def total_grid(self):
+        return self.grid_x * self.grid_x
+
+    def is_within_grid(self, x, y):
+        if 0 <= x < self.grid_x and 0 <= y < self.grid_y:
+            print(f"True: {x} {y}")
+            return True
+
+        raise ValueError(f"False: {x} {y}")
+        return False
+
+    def add_entity(self, entity, x, y):
+        if self.is_within_grid(x, y):
+            if self.grid[x][y] is None:
+                self.grid[x][y] = entity
+            else:
+                raise ValueError(f"An entity already exists at this position: {x} {y}")
+        else:
+            raise ValueError(f"Position out of grid bounds: {x} {y}")
+
+    def remove_entity(self, entity):
+        for x in range(self.grid_x):
+            for y in range(self.grid_y):
+                if self.grid[x][y] == entity:
+                    self.grid[x][y] = None
+                    return True
+        raise ValueError(f"Entity not found on the grid: {x} {y}")
+
+    def move_entity(self, entity, next_x, next_y):
+        copy_entity = None
+        is_moved = False
+        if self.is_within_grid(next_x, next_y) and self.is_within_grid(entity.x, entity.y):
+            entity_copy = copy.deepcopy(entity)
+            if self.remove_entity(entity):
+                entity_copy.x = next_x
+                entity_copy.y = next_y
+                if self.add_entity(entity_copy, entity_copy.x, entity_copy.y):
+                    is_moved = True
+                else:
+                    raise ValueError("Entity not add on the grid")
+            else:
+                raise ValueError("Entity not removed on the grid")
+        else:
+            raise ValueError("Entity or next_coord not found on the grid")
+
+        return is_moved
+
+
+        print(f"Number of living entities: {len(entities)}")
+
+    def is_position_empty(self, x, y):
+        if self.is_within_grid(x, y):
+            return self.grid[x][y] is None
+        else:
+            return False
+            #raise ValueError("Position out of grid bounds")
+
+    def get_empty_positions(self):
+        empty_positions = []
+        for x in range(self.grid_x):
+            for y in range(self.grid_y):
+                if self.grid[x][y] is None:
+                    empty_positions.append((x, y))
+        return empty_positions
+
+    def get_all_elements(self):
+        all_elements = []
+        for x in range(self.grid_x):
+            for y in range(self.grid_y):
+                element = self.grid[x][y]
+                if element is not None:
+                    all_elements.append(element)
+        return all_elements
+
+    def get_all_type_elements(self, agent_type):
+        type_elements = []
+        for x in range(self.grid_x):
+            for y in range(self.grid_y):
+                element = self.grid[x][y]
+                if element is not None and element.agent_type == agent_type:
+                    type_elements.append(element)
+        return type_elements
+
+    def get_elements_in_region(self, x, y, ray):
+        elements = []
+        start_x = max(x - ray, 0)
+        end_x = min(x + ray + 1, self.grid_x)
+        start_y = max(y - ray, 0)
+        end_y = min(y + ray + 1, self.grid_y)
+        for i in range(start_x, end_x):
+            for j in range(start_y, end_y):
+                if i == x and j == y:
+                    continue
+                element = self.grid[i][j]
+                if element is not None:
+                    elements.append(element)
+        return elements
+
+    def get_empty_in_region(self, x, y, ray):
+        coordinates = []
+        start_x = max(x - ray, 0)
+        end_x = min(x + ray + 1, self.grid_x)
+        start_y = max(y - ray, 0)
+        end_y = min(y + ray + 1, self.grid_y)
+        for i in range(start_x, end_x):
+            for j in range(start_y, end_y):
+                if i == x and j == y:
+                    continue
+                if self.grid[i][j] is None:
+                    coordinates.append((i, j))
+        return coordinates
+
+    def calculate_distance(self, x1, y1, x2, y2):
+        dx = x2 - x1
+        dy = y2 - y1
+        distance = math.sqrt(dx**2 + dy**2)
+        return distance
+
+
+### Classe: Agent
+
+class Agent:
+    def __init__(self, id, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray):
+        # Atributos do agente
+        self.id = Id.create_id()  # ID único do agente
+        self.x = x  # Posição x atual
+        self.y = y  # Posição y atual
+        self.previous_x = x  # Posição x anterior
+        self.previous_y = y  # Posição y anterior
+        self.grid = grid  # Referência ao grid em que o agente está
+        self.initial_speed = speed  # Velocidade inicial do agente
+        self.speed = speed  # Velocidade atual do agente
+        self.agent_type = agent_type  # Tipo do agente (plant, prey, predator)
+        self.limit_age = limit_age  # Limite de idade do agente
+        self.age = age  # Idade atual do agente
+        self.target = None  # Alvo atual do agente
+        self.life_stage = "new"  # Estágio de vida do agente
+        self.initial_life = initial_life  # Vida inicial do agente
+        self.life = initial_life  # Vida atual do agente
+        self.has_reproduced = False  # Flag indicando se o agente já se reproduziu
+        self.vision_ray = vision_ray  # Raio de visão do agente
+        self.action = None  # Ação atual do agente
+
+    #v2
+    def set_position(self, x, y):
+        # Define a posição do agente
+        self.x = x
+        self.y = y
+
+    def set_action(self, action):
+        self.action = action
+
+    def get_action(self):
+        return str(self.action)
+
+    def Null_action(self):
+        self.action = None
+
+
+    #v2---
+    def track(self, entity):
+        """
+        Rastreia a entidade-alvo.
+        O agente se move em direção à entidade-alvo se estiver dentro do campo de visão.
+        Caso contrário, ele se move em direção ao ponto mais distante dentro do campo de visão.
+        O movimento é limitado pela velocidade (speed) do agente.
+        """
+        nearby_entities = self.grid.get_entities_in_vision(self.x, self.y, self.vision_ray)
+
+        if self.x is not None and self.y is not None:
+            if entity in nearby_entities:
+                # Movimento em direção à entidade-alvo
+                empty_positions = self.grid.get_empty_positions_in_vision(entity.x, entity.y, 0)
+                if empty_positions:
+                    target_position = empty_positions[0]
+                    distance = self.grid.calculate_toroidal_distance(self.x, self.y, target_position[0], target_position[1])
+                    if distance <= self.speed:
+                        self.move(target_position[0], target_position[1])
+                    else:
+                        dx = target_position[0] - self.x
+                        dy = target_position[1] - self.y
+                        ratio = self.speed / distance
+                        new_x = (self.x + math.floor(dx * ratio)) % self.grid.size
+                        new_y = (self.y + math.floor(dy * ratio)) % self.grid.size
+                        if self.grid.get_entity(new_x, new_y) is None:
+                            self.move(new_x, new_y)
+
+            else:
+                # Movimento em direção ao ponto mais distante no campo de visão
+                empty_positions = self.grid.get_empty_positions_in_vision(self.x, self.y, self.vision_ray)
+                if empty_positions:
+                    farthest_position = max(empty_positions, key=lambda pos: self.grid.calculate_toroidal_distance(self.x, self.y, pos[0], pos[1]))
+                    distance = self.grid.calculate_toroidal_distance(self.x, self.y, farthest_position[0], farthest_position[1])
+                    if distance <= self.speed:
+                        self.move(farthest_position[0], farthest_position[1])
+                    else:
+                        dx = farthest_position[0] - self.x
+                        dy = farthest_position[1] - self.y
+                        ratio = self.speed / distance
+                        new_x = (self.x + math.floor(dx * ratio)) % self.grid.size
+                        new_y = (self.y + math.floor(dy * ratio)) % self.grid.size
+                        if self.grid.get_entity(new_x, new_y) is None:
+                            self.move(new_x, new_y)
+
+
+    #v2
+    def move(self, new_x , new_y):
+        # Atualiza grid
+        if self.grid.move_entity(self, new_x, new_y):
+            self.action = "move"
+        else: self.action = "not move"
+
+    #v2
+    def reproduction(self, entity):
+        None
+
+
+    #v2
+    def update_age(self):
+        # Atualiza a idade do agente e seu estágio de vida
+        self.age += 1
+        age_percentage = self.age / self.limit_age
+
+        if age_percentage < 0.1:
+            self.speed = math.ceil(self.initial_speed * 0.8)
+            self.life_stage = "new"
+
+        elif age_percentage < 0.9:
+            self.speed = self.initial_speed
+            self.life_stage = "adult"
+
+        elif age_percentage <= 1:
+            self.speed = math.ceil(self.initial_speed * 0.8)
+            self.life_stage = "old"
+
+        else:
+            self.speed = 0
+            self.life_stage = "die"
+            self.delete()
+
+    #v2
+    def check_removal(self):
+        # Verifica se o agente deve ser removido do grid
+        if self.age > self.limit_age or self.life <= 0:
+            self.delete()
+
+    #v2
+    def delete(self):
+        # Remove o agente do grid
+        if self.x is not None and self.y is not None:
+            self.grid.remove_entity(self)
+            self.life = 0
+            self.speed = 0
+            self.life_stage = "die"
+            self.x = None
+            self.y = None
+            Id.delete_id(self.id)
+        else: raise ValueError(f"Position out of grid bounds: {x} {y}")
+
+
+    #v2
+    def reload(self):
+        None
+
+    #v2
+    def turn(self):
+        None
+
+
+
+### Plant
+
+class Plant(Agent):
+    #const
+    TYPE = "plant"
+
+
+    def __init__(self, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray):
+        # Chamando o construtor da superclasse (Agent)
+        super().__init__(id, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray)
+        self.life = initial_life
+        self.grid.add_entity(self, x, y)
+
+    @staticmethod
+    def create_new_plant(x, y, grid):
+        return Plant(x, y, grid, speed = Att.plant_speed, agent_type = Plant.TYPE, initial_life = Att.plant_initial_life, age = Att.plant_age, limit_age=Att.plant_limit_age, vision_ray=Att.plant_vision_ray)
+
+
+    def move(self):
+        self.set_action("Move None")
+
+    #v2
+    def update_age(self):
+        None
+
+    #v2
+    def reload(self):
+        None
+
+    def hunt(self):
+        None
+
+    def random_track(self):
+        None
+
+
+    def reproduction_2(self):
+        total = self.grid.grid_x * self.grid.grid_y
+        random_number = random.random()
+        if self.life > 0:
+            if random_number < 0.2:
+                empty_positions = self.grid.get_empty_positions()
+                if empty_positions:
+                    random_coord = random.choice(empty_positions)
+                    new_x =  random_coord[0]
+                    new_y =  random_coord[1]
+                    new_plant = Plant.create_new_plant(new_x, new_y, self.grid)
+                    self.set_action("reproduction!")
+                    new_plant.set_action('Create plant, Id: ' + str(new_plant.id))
+                else:
+                    self.set_action("full positions!")
+            else:
+                self.set_action("Plant not reproduction!")
+        else:
+                self.set_action("Dead: Plant not reproduction ")
+
+    def reproduction(self):
+        random_number = random.random()
+        if self.life > 0:
+            occupy_type_positions = self.grid.get_all_type_elements("plant")
+            if len(occupy_type_positions) <= Att.plant_ocuppation_reproduction * self.grid.total_grid():  #0.1
+                random_number = random.random()
+                if random_number < Att.plant_prob_reproduction: #0.1
+                    empty_positions = self.grid.get_empty_positions()
+                    if empty_positions:
+                        random_coord = random.choice(empty_positions)
+                        new_x =  random_coord[0]
+                        new_y =  random_coord[1]
+                        new_plant = Plant.create_new_plant(new_x, new_y, self.grid)
+                        self.set_action("reproduction!")
+                        new_plant.set_action('Create plant, Id: ' + str(new_plant.id))
+                    else:
+                        self.set_action("full positions!")
+                else:
+                    self.set_action("Plant not reproduction!")
+            else:
+                self.set_action("Plant not reproduction!")
+        else:
+            self.set_action("Dead: Plant not reproduction ")
+
+
+
+
+
+
+### Prey
+
+class Prey(Agent):
+    #const
+    TARGET = "plant"
+    TYPE = "prey"
+
+    def __init__(self, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray, defense):
+        super().__init__(id, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray)
+        self.defense = defense
+        self.has_reproduced = 0  # Adicionado o atributo has_reproduced
+        self.grid.add_entity(self, x, y)
+
+
+    @staticmethod
+    def create_new_prey(x, y, grid):
+        return Prey(x, y, grid, speed = Att.prey_speed, agent_type = Prey.TYPE, initial_life = Att.prey_initial_life, age = Att.prey_age, limit_age=Att.prey_limit_age, vision_ray=Att.prey_vision_ray, defense=Att.prey_defense)
+
+
+    #v2
+    def hunt(self):
+
+        nearby_entities = self.grid.get_elements_in_region(self.x, self.y, self.vision_ray)
+        nearby_same_type_plants = [entity for entity in nearby_entities if (entity.agent_type == Prey.TARGET and entity.life > 0)]
+
+        if nearby_same_type_plants:
+            random_plant = random.choice(nearby_same_type_plants)
+            self.eaten(random_plant)
+        else:
+            self.set_action("no nearby_same_type_plants !!!")
+
+
+
+    def random_track(self):
+        empty_positions_on_grid = self.grid.get_empty_in_region(self.x, self.y, self.vision_ray)
+        x_rand = None
+        y_rand = None
+
+        if len(empty_positions_on_grid) > 0:
+            random_empty_position_on_grid = random.choice(empty_positions_on_grid)
+
+            print(random_empty_position_on_grid[0], random_empty_position_on_grid[1])
+            x_rand = random_empty_position_on_grid[0]
+            y_rand = random_empty_position_on_grid[1]
+
+        return [x_rand, y_rand]
+
+
+    #v2
+    def reproduction(self):
+        nearby_entities = self.grid.get_elements_in_region(self.x, self.y, 1)
+        nearby_same_type_prey = [entity for entity in nearby_entities if (entity != self and entity.agent_type == self.agent_type and  entity.has_reproduced == 0 and entity.life > 0) ]
+
+        if nearby_same_type_prey:
+            entity = random.choice(nearby_same_type_prey)
+            if self.agent_type == entity.agent_type and self.id != entity.id and entity.has_reproduced == 0:
+                if self.has_reproduced == 0 and entity.has_reproduced == 0:
+                    if self.life_stage != None:
+                        if self.life_stage == "adult" and entity.life_stage == "adult":
+                            mean_initial_life = int(math.ceil((self.initial_life + entity.initial_life)/2))
+                            if (self.life >= mean_initial_life or entity.life >= mean_initial_life ):
+                                empty_positions = self.grid.get_empty_in_region(self.x, self.y, self.vision_ray)
+                                if len(empty_positions) != 0:
+                                    random_position = random.choice(empty_positions)
+                                    random_coord = random.choice(empty_positions)
+                                    new_x =  random_coord[0]
+                                    new_y =  random_coord[1]
+                                    new_prey = self.create_new_prey(new_x, new_y, self.grid)
+                                    self.set_action('Reproduziu com: ' + str(entity.id) + ' Criou: ' + str(new_prey.id) + str(self.has_reproduced) + str(entity.has_reproduced) )
+                                    new_prey.set_action('New prey, Id: ' + str(new_prey.id))
+                                    self.has_reproduced = 1
+                                    entity.has_reproduced = 1
+                                    new_prey.has_reproduced = 1
+                                else:
+                                    self.set_action("if len(empty_positions) != 0:")
+                            else:
+                                self.set_action(" if (self.life >= mean_initial_life or entity.life >= mean_initial_life ):")
+                        else:
+                            self.set_action("if self.life_stage == adult and entity.life_stage == adult:")
+                else:
+                    self.set_action("if self.has_reproduced  == False and entity.has_reproduced == False:")
+            else:
+                self.set_action("self.agent_type == entity.agent_type and self.id != entity.id :")
+        else:
+            self.set_action("no reproduction !!!")
+
+    #v2
+    def eaten(self, plant):
+        if self.grid.calculate_distance(self.x, self.y, plant.x, plant.y) <= 1:
+            plant.delete()
+            self.life = self.life*1.3
+            self.set_action('Alimentou: ' + str(self.id))
+        else: self.set_action('Nao se Alimentou, distancia maior 1: ' + str(self.id))
+
+
+
+    def reload(self):
+        self.has_reproduced = 0
+        self.defense = Att.prey_defense
+        self.action = None
+
+
+
+
+### Predator
+
+
+class Predator(Agent):
+    #const
+    TARGET = "prey"
+    TYPE = "predator"
+
+    def __init__(self, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray,  attack):
+        super().__init__(id, x, y, grid, speed, agent_type, initial_life, age, limit_age, vision_ray)
+
+        self.target = Predator.TARGET
+        self.attack = Att.predator_attack
+        self.has_reproduced = 0  # Adicionado o atributo has_reproduced
+        self.grid.add_entity(self, x, y)
+
+
+    @staticmethod
+    def create_new_predator( x, y, grid):
+        return Predator(x, y, grid, speed = Att.predator_speed, agent_type = Predator.TYPE, initial_life = Att.predator_initial_life, age = Att.predator_age, limit_age=Att.predator_limit_age, vision_ray=Att.predator_vision_ray, attack=Att.predator_attack)
+
+    #v2
+    def explore(self):
+        nearby_entities = self.grid.get_elements_in_region(self.x, self.y, self.vision_ray)
+        nearby_same_types = [entity for entity in nearby_entities if (entity.agent_type == Predator.TYPE and entity.life > 0)]
+        nearby_targets = [entity for entity in nearby_entities if (entity.agent_type == Predator.TARGET and entity.life > 0)]
+
+        if len(nearby_same_types) > 0 and len(nearby_targets) > 0:
+
+
+
+    #v2
+    def hunt(self):
+
+        nearby_entities = self.grid.get_elements_in_region(self.x, self.y, self.vision_ray)
+        nearby_same_type_prey = [entity for entity in nearby_entities if (entity.agent_type == Predator.TARGET and entity.life > 0)]
+
+        if nearby_same_type_prey:
+            random_prey = random.choice(nearby_same_type_prey)
+            self.combat(random_prey)
+        else: self.set_action("no nearby_same_type_prey !!!")
+
+    def random_track(self):
+        empty_positions_on_grid = self.grid.get_empty_in_region(self.x, self.y, self.vision_ray)
+        x_rand = None
+        y_rand = None
+
+        if len(empty_positions_on_grid) > 0:
+            random_empty_position_on_grid = random.choice(empty_positions_on_grid)
+
+            print(random_empty_position_on_grid[0], random_empty_position_on_grid[1])
+            x_rand = random_empty_position_on_grid[0]
+            y_rand = random_empty_position_on_grid[1]
+
+        return [x_rand, y_rand]
+
+
+    #v2
+    def reproduction(self):
+
+        nearby_entities = self.grid.get_elements_in_region(self.x, self.y, self.vision_ray)
+        nearby_same_type_predator = [entity for entity in nearby_entities if (entity != self and entity.agent_type == self.agent_type and  entity.has_reproduced == 0 and entity.life > 0) ]
+        if nearby_same_type_predator:
+            entity = random.choice(nearby_same_type_predator)
+            if self.agent_type == entity.agent_type and self.id != entity.id and entity.has_reproduced == 0:
+                if self.has_reproduced == 0 and entity.has_reproduced == 0:
+                    if self.life_stage == "adult" and entity.life_stage == "adult":
+                        mean_initial_life = int(math.ceil((self.initial_life + entity.initial_life)/2))
+                        if (self.life >= mean_initial_life or entity.life >= mean_initial_life ):
+                            empty_positions = self.grid.get_empty_in_region(self.x, self.y, self.vision_ray)
+                            if len(empty_positions) != 0:
+                                random_position = random.choice(empty_positions)
+                                random_coord = random.choice(empty_positions)
+                                new_x =  random_coord[0]
+                                new_y =  random_coord[1]
+                                new_predator = self.create_new_predator(new_x, new_y, self.grid)
+                                # criar novo agente... deverá ser adicionado na classe filho
+                                self.set_action('Reproduziu com: ' + str(entity.id) + ' Criou: ' + str(new_predator.id) + str(self.has_reproduced) + str(entity.has_reproduced) )
+                                new_predator.set_action('New predator, Id: ' + str(new_predator.id))
+                                self.has_reproduced = 1
+                                entity.has_reproduced = 1
+                                new_predator.has_reproduced = 1
+                            else:
+                                self.set_action("if len(empty_positions) != 0:")
+                        else:
+                            self.set_action("if (self.life >= mean_initial_life or entity.life >= mean_initial_life ):")
+                    else:
+                        self.set_action("if self.life_stage == adult and entity.life_stage == adult:")
+                else:
+                    self.set_action("if self.has_reproduced  == False and entity.has_reproduced == False:")
+            else:
+                self.set_action("self.agent_type == entity.agent_type and self.id != entity.id :")
+        else:
+            self.set_action("no reproduction !!!")
+
+    #v2
+    def eaten(self, prey):
+        if self.grid.calculate_distance(self.x, self.y, prey.x, prey.y) <= 1:
+            prey.action = ('Morte em combat: ' + str(prey.id) )
+            self.life = self.life*1.3
+            self.action = ('Se alimentou: ' + str(prey.id) )
+            prey.delete()
+
+    #v2
+    def combat(self, prey):
+        if self.grid.calculate_distance(self.x, self.y, prey.x, prey.y) <= 1:
+            diff =  prey.defense - self.attack
+            self.action = ('Entrou em combate com: ' + str(prey.id) )
+            if diff <= 0:
+                self.eaten(prey)
+            else:
+                prey.action = self.action = ('Entrou em combate e sobreviveu: ' )
+                prey.defense = diff
+
+
+    def reload(self):
+        self.has_reproduced = 0
+        self.attack = Att.predator_attack
+        self.action = None
+
+### Main
+
+class Main:
+    def __init__(self, grid_x, grid_y):
+        self.grid = Grid(grid_x, grid_y)
+        Id.reset_ids()
+        self.data_move = pd.DataFrame(columns=['hop', 'id', 'type', 'x_old', 'y_old', 'x_new', 'y_new'])
+        self.data_count = pd.DataFrame(columns=['hop', 'plant', 'prey', 'predator'])
+        self.data_action = pd.DataFrame(columns=['hop', 'id', 'type', 'action'])
+
+
+    def simulate(self, step):
+
+        self.entities = []  # Lista vazia para armazenar os elementos do grid
+
+        for hop in range(step):
+            print(f"----- Step {hop+1} -----")
+            print(f"----- Entrou no hop -----")
+
+            self.entities = self.grid.get_all_elements()
+            print(f"Number of living entities: {len(self.entities)}")
+
+            empty_positions = self.grid.get_empty_positions()
+            print(f"Number of empty positions: {len(empty_positions)}")
+
+            #Atualizar o DataFrame de contagem para o hop atual
+            self.update_data_count(hop)
+
+            entities = self.entities
+
+            for entity in entities:
+                print(f"----- For entity com  -----")
+
+                self._check_and_reproduce(entity, empty_positions)
+
+
+                self._check_and_move(self, entity, self.grid)
+
+                entity.hunt()
+                #print(f"{entity.agent_type} {entity.id}: {entity.get_action()}")
+                print(f"Coord x , y : {entity.get_action()}")
+
+                entity.check_removal() # pq
+
+                # Criar o DataFrame Action para o hop atual
+                df_action = self.update_dataframe_action(hop, entity.id, entity.agent_type, entity.get_action())
+                # Criar o DataFrame Move para o hop atual
+                df_move = self.update_dataframe_move(hop, entity.id, entity.agent_type, entity.previous_x, entity.previous_y, entity.x, entity.y)
+
+                self.entities.remove(entity) # pq
+
+            [entity.reload() for entity in self.entities] # pq
+            [entity.update_age() for entity in self.entities] # pq
+
+        print("Fim simulacao!")
+
+    def update_dataframe_move(self, hop, id, agent_type, previous_x, previous_y, x, y):
+        # Criar o DataFrame
+        new_row = pd.DataFrame({
+            'hop': [hop],
+            'id': [id],
+            'type': [agent_type],
+            'x_old': [previous_x],
+            'y_old': [previous_y],
+            'x_new': [x],
+            'y_new': [y]
+        })
+
+        self.data_move = pd.concat([self.data_move, new_row], ignore_index=True)
+
+
+
+    def update_dataframe_action(self, hop, id, agent_type, action):
+        # Criar o DataFrame
+        new_row = pd.DataFrame({
+            'hop': [hop],
+            'id': [id],
+            'type': [agent_type],
+            'action': [action]
+        })
+
+        self.data_action = pd.concat([self.data_action, new_row], ignore_index=True)
+
+
+
+    def update_data_count(self, hop):
+        # Contagem de plantas, presas e predadores
+        plant_count = 0
+        prey_count = 0
+        predator_count = 0
+
+        # Percorrer as entidades no grid
+        entities = self.grid.get_all_elements()
+        for entity in entities:
+            if isinstance(entity, Plant):
+                plant_count += 1
+            elif isinstance(entity, Prey):
+                prey_count += 1
+            elif isinstance(entity, Predator):
+                predator_count += 1
+
+        # Criar o DataFrame para o hop atual
+        new_row = pd.DataFrame({
+            'hop': [hop],
+            'plant': [plant_count],
+            'prey': [prey_count],
+            'predator': [predator_count],
+            'none': [len(self.grid.get_empty_positions())]
+        })
+
+        # Converter a coluna "none" para int usando o método astype() e apply()
+        new_row['none'] = new_row['none'].apply(lambda x: int(round(x)))
+
+        self.data_count = pd.concat([self.data_count, new_row], ignore_index=True)
+
+
+    def create_random_agents(self, num_plants, num_preys, num_predators):
+        list_agents = [("plant", num_plants), ("prey", num_preys), ("predator", num_predators)]
+        total_agents = list_agents[0][1] + list_agents[1][1] + list_agents[2][1]
+
+        while total_agents > 0:
+            update_create_list = []
+
+            # Atualiza lista de agentes caso algum tipo de agente for maior que zero, será adicionado à lista para criação
+            for i in range(len(list_agents)):
+                if list_agents[i][1] > 0:
+                    update_create_list.append(list_agents[i])
+
+            if len(update_create_list) == 0 :
+                break  # Sai do loop se a lista estiver vazia
+
+            random_element_list = random.choice(update_create_list) # ex.: ("plant", num_plants)
+
+            if self.create_agent_random(random_element_list):
+                random_element_list = (random_element_list[0], random_element_list[1] - 1)
+            else:
+                raise ValueError(f"Entity not create on the grid")
+
+            # Atualiza total de agentes na lista de agentes
+            for i, agent in enumerate(list_agents):
+                if agent[0] == random_element_list[0]:
+                    list_agents[i] = random_element_list
+
+            total_agents = list_agents[0][1] + list_agents[1][1] + list_agents[2][1]
+
+
+    def create_agent_random(self, entity):
+        var = False
+
+        empty_positions = self.grid.get_empty_positions()
+
+        random_empty_position = random.choice(empty_positions)
+
+        if entity[0] == "plant":
+            plant = Plant.create_new_plant(random_empty_position[0], random_empty_position[1], self.grid)
+            plant.set_action('Create plant, Id: ' + str(plant.id))
+            print(f"{plant.agent_type} {plant.id}: {plant.life} : {plant.get_action()} ")
+            var = True
+
+        elif entity[0] == "prey":
+            prey = Prey.create_new_prey(random_empty_position[0], random_empty_position[1], self.grid)
+            prey.set_action('Create prey, Id: ' + str(prey.id))
+            print(f"{prey.agent_type} {prey.id}: {prey.x}:  {prey.y}: {prey.get_action()} ")
+            var = True
+
+        elif entity[0] == "predator":
+            predator = Predator.create_new_predator(random_empty_position[0], random_empty_position[1], self.grid)
+            predator.set_action('Create predator, Id: ' + str(predator.id))
+            print(f"{predator.agent_type} {predator.id}: ({predator.x},{predator.y}) : {predator.get_action()} ")
+            var = True
+
+        return var
+
+    def _check_and_reproduce(self, entity, empty_positions):
+        if int(entity.life) > 0 and len(empty_positions) > 0:
+            entity.reproduction()
+
+    def _check_and_move(self, entity, grid):
+        if entity.life > 0 and entity.agent_type != "plant":
+            x_next = None
+            y_next = None
+
+            next_track = entity.random_track()
+
+            x_next = next_track[0]
+            y_next = next_track[1]
+
+            if x_next is not None and y_next is not None:
+                if grid.remove_entity(entity):
+                    entity.x = x_next
+                    entity.y = y_next
+                    if grid.is_position_empty(x_next, y_next):
+                        grid.grid[entity.x][entity.y] = entity
+                        print(f"Movido {entity.agent_type}: {entity.x}: {entity.y}")
+                else:
+                    print(f"Não Movido {entity.agent_type}: {entity.x}: {entity.y}")
+
+
+class Att:
+    #Constants plants
+    plant_speed=0
+    plant_initial_life=30
+    plant_age=0
+    plant_limit_age=50
+    plant_vision_ray=1
+    plant_ocuppation_reproduction = 0.3
+    plant_prob_reproduction = 0.2
+
+    #Constants preys
+    prey_speed=3
+    prey_initial_life=30
+    prey_limit_age=50
+    prey_age=0
+    prey_vision_ray=3
+    prey_defense = 30
+
+
+    #Constants predators
+    predator_speed=1
+    predator_initial_life=30
+    predator_limit_age=50
+    predator_age=0
+    predator_vision_ray=1
+    predator_attack  = 30
+
+
+main = Main(grid_x = 40, grid_y=20)
+main.create_random_agents(40,40,40)
+
+
+main.entities = main.grid.get_all_elements()
+
+print(main.grid.is_position_empty(main.entities[0].x, main.entities[0].y))
+print(f"Number of living entities: {len(main.entities)}")
+
+
+#main.entities = main.grid.get_all_elements()
+#print(main.entities[0].x)
+##print(main.entities[0].y)
+#print(f"Number of living entities: {len(main.entities)}")
+
+#main.create_agents(5,10,10)
+
+main.simulate(30)
+
+
+
+
+
+main.data_move.describe()
+main.data_move.to_csv('data_move.csv', index=False)
+main.data_count.to_csv('data_count.csv', index=False)
+main.data_action.to_csv('data_action.csv', index=False)
+
+
+# Não esquecer
+#Se as coordenadas x, y e olds nao mudar, nao precisa parecer em data_move e data action
+
+
+
+
+
+### Graficos
+
+import matplotlib.pyplot as plt
+
+# Extrair os dados do DataFrame
+hops = main.data_count['hop']
+plant_counts = main.data_count['plant']
+prey_counts = main.data_count['prey']
+predator_counts = main.data_count['predator']
+none_counts = main.data_count['none']
+
+# Converter hops para números inteiros
+hops = hops.astype(int)
+
+# Plotar o gráfico
+plt.plot(hops, plant_counts, label='Plantas', color='green')
+plt.plot(hops, prey_counts, label='Presas', color='blue')
+plt.plot(hops, predator_counts, label='Predadores', color='red')
+plt.plot(hops, none_counts, label='None', color='beige')
+
+
+# Adicionar rótulos aos eixos e um título ao gráfico
+plt.xlabel('Hops')
+plt.ylabel('Contagem')
+plt.title('Contagem de Plantas, Presas e Predadores')
+
+# Definir os rótulos do eixo x
+plt.xticks(hops, hops)
+
+# Adicionar uma legenda
+plt.legend(title='Hop')
+
+# Exibir o gráfico
+plt.show()
+
+
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from IPython.display import HTML
+
+class AnimateEntities:
+    def __init__(self, df, grid_x, grid_y):
+        self.df = df
+        self.grid_x = grid_x
+        self.grid_y = grid_y
+
+    def plot(self):
+        # Preparando a animação
+        fig, ax = plt.subplots(figsize=(8, 4))  # Tamanho da figura ajustado para ser mais visível no Colab
+
+        # Limites do gráfico e cor de fundo
+        ax.set_xlim(-5, self.grid_x)
+        ax.set_ylim(-5, self.grid_y)
+        ax.set_facecolor('black')
+
+        colors = {'plant': 'green', 'prey': 'blue', 'predator': 'red'}
+        markers = {'plant': 'o', 'prey': 's', 'predator': 'v'}
+
+        scatters = {key: ax.scatter([], [], marker=markers[key], color=colors[key]) for key in colors}
+
+        def animate(i):
+            ax.clear()  # Limpa o gráfico a cada iteração
+            ax.set_xlim(-1, self.grid_x)  # Define os limites do gráfico
+            ax.set_ylim(-1, self.grid_y)
+            ax.set_aspect('auto')  # Define a relação de aspecto automática
+
+            hop_data = self.df[self.df['hop'] == i]
+            for entity_type, color in colors.items():
+                type_data = hop_data[hop_data['type'] == entity_type]
+                x_values = type_data['x_new'].values
+                y_values = type_data['y_new'].values
+                scatter = scatters[entity_type]
+                scatter.set_offsets(np.column_stack((x_values, y_values)))
+                ax.add_artist(scatter)  # Adiciona o scatter atualizado ao gráfico
+
+            return [scatter for scatter in scatters.values()]
+
+        ani = animation.FuncAnimation(fig, animate, frames=len(self.df['hop'].unique()), interval=50, blit=True)
+
+        # No Colab, usamos HTML() para exibir a animação
+        return HTML(ani.to_jshtml())
+
+# Crie uma instância do animador com seus dados e tamanho da grade
+animator = AnimateEntities(main.data_move, 40, 20)  # 80 é o tamanho da grade em x e 20 é o tamanho da grade em y
+
+# Exiba a animação
+animator.plot()
